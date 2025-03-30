@@ -1,0 +1,105 @@
+# Winsurf 後端 API 設計文件
+
+## 1. 概述
+
+Winsurf 的後端 API 主要負責處理使用者驗證、商品管理，以及提供前端所需的數據。後端使用 AWS API Gateway 來管理 API 入口，並透過 Lambda 處理請求。
+
+## 2. Google OAuth 認證流程
+
+1. 前端透過 Google OAuth 進行驗證，取得 `code`。
+2. `code` 會被傳遞到後端 API：
+   ```
+   POST https://0d2f8bryih.execute-api.us-west-2.amazonaws.com/staging/oauth
+   ```
+3. 後端使用 `code` 交換 `access_token`。
+4. 使用 `access_token` 向 Google 取得使用者資訊。
+5. 若使用者為新用戶，則建立帳號，並儲存 `Google ID`、`email`、`resource key`。
+
+### 2.1 使用者資訊表 (User Table)
+
+| 欄位            | 類型        | 描述                |
+| ------------- | --------- | ----------------- |
+| id            | UUID      | 使用者唯一識別碼          |
+| name          | String    | 使用者名稱             |
+| email         | String    | 電子郵件地址            |
+| phone         | String    | 手機號碼              |
+| google\_id    | String    | Google 帳號 ID      |
+| resource\_key | String    | Google OAuth 資源金鑰 |
+| created\_at   | Timestamp | 創建時間              |
+| updated\_at   | Timestamp | 更新時間              |
+
+## 3. 商品管理
+
+### 3.1 商品 API 介接
+
+1. 取得所有商品：
+   ```
+   GET /products
+   ```
+2. 取得單一商品資訊：
+   ```
+   GET /products/{id}
+   ```
+3. 新增商品 (管理員權限)：
+   ```
+   POST /products
+   ```
+   **Request Body:**
+   ```json
+   {
+     "name": "新鮮蚵仔",
+     "price": 299,
+     "stock": 100,
+     "image": "https://example.com/oyster.jpg"
+   }
+   ```
+4. 更新商品資訊 (管理員權限)：
+   ```
+   PUT /products/{id}
+   ```
+5. 刪除商品 (管理員權限)：
+   ```
+   DELETE /products/{id}
+   ```
+
+### 3.2 商品表 (Product Table)
+
+| 欄位          | 類型        | 描述      |
+| ----------- | --------- | ------- |
+| id          | UUID      | 商品唯一識別碼 |
+| name        | String    | 商品名稱    |
+| price       | Decimal   | 商品價格    |
+| stock       | Integer   | 商品庫存    |
+| image\_url  | String    | 商品圖片網址  |
+| created\_at | Timestamp | 創建時間    |
+| updated\_at | Timestamp | 更新時間    |
+
+## 4. API Gateway 設計
+
+所有 API 皆透過 AWS API Gateway 管理，Lambda 作為後端運行邏輯，數據儲存於 DynamoDB。
+
+### 4.1 API Gateway 路由規劃
+
+| 方法     | 路徑             | 描述              |
+| ------ | -------------- | --------------- |
+| POST   | /oauth         | Google OAuth 驗證 |
+| GET    | /products      | 取得所有商品          |
+| GET    | /products/{id} | 取得單一商品資訊        |
+| POST   | /products      | 新增商品 (管理員)      |
+| PUT    | /products/{id} | 更新商品資訊 (管理員)    |
+| DELETE | /products/{id} | 刪除商品 (管理員)      |
+
+## 5. 安全性考量
+
+1. **OAuth 安全性**：使用 JWT 驗證用戶請求。
+2. **API 權限**：透過 IAM 角色與 Lambda 授權控管 API Gateway。
+3. **資料庫加密**：DynamoDB 儲存使用 AWS KMS 加密保護資料。
+
+## 6. 其他擴充
+
+- **訂單管理** (待補充)
+- **使用者角色權限控管**
+- **WebSocket 即時通知 (可選)**
+
+這是 Winsurf 後端 API 設計文件的初稿，後續可以根據需求進一步優化與擴充。\
+\
