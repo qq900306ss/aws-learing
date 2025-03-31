@@ -30,6 +30,7 @@ var (
 const (
 	userTableName    = "LamdaInGoUser"
 	productTableName = "LamdaInGoProduct"
+	cartTableName    = "carts"
 )
 
 // 初始化函數，在 Lambda 冷啟動時執行
@@ -50,6 +51,9 @@ func init() {
 
 	// 初始化 DynamoDB 客戶端
 	dynaClient = dynamodb.New(awsSession)
+
+	// 確保購物車表格存在
+	ensureCartTableExists()
 
 	// 設置 Gin 路由器
 	r := router.SetupRouter(userTableName, productTableName, dynaClient)
@@ -77,6 +81,70 @@ func init() {
 
 	// 初始化 Gin Lambda 適配器
 	ginLambda = ginadapter.New(r)
+}
+
+// 確保購物車表格存在
+func ensureCartTableExists() {
+	// 檢查表格是否存在
+	_, err := dynaClient.DescribeTable(&dynamodb.DescribeTableInput{
+		TableName: aws.String(cartTableName),
+	})
+
+	// 如果表格不存在，創建它
+	if err != nil {
+		log.Printf("購物車表格不存在，正在創建: %v", err)
+
+		// 創建表格
+		_, err = dynaClient.CreateTable(&dynamodb.CreateTableInput{
+			TableName: aws.String(cartTableName),
+			AttributeDefinitions: []*dynamodb.AttributeDefinition{
+				{
+					AttributeName: aws.String("id"),
+					AttributeType: aws.String("S"),
+				},
+				{
+					AttributeName: aws.String("user_id"),
+					AttributeType: aws.String("S"),
+				},
+			},
+			KeySchema: []*dynamodb.KeySchemaElement{
+				{
+					AttributeName: aws.String("id"),
+					KeyType:       aws.String("HASH"),
+				},
+			},
+			GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+				{
+					IndexName: aws.String("UserIDIndex"),
+					KeySchema: []*dynamodb.KeySchemaElement{
+						{
+							AttributeName: aws.String("user_id"),
+							KeyType:       aws.String("HASH"),
+						},
+					},
+					Projection: &dynamodb.Projection{
+						ProjectionType: aws.String("ALL"),
+					},
+					ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+						ReadCapacityUnits:  aws.Int64(5),
+						WriteCapacityUnits: aws.Int64(5),
+					},
+				},
+			},
+			ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+				ReadCapacityUnits:  aws.Int64(5),
+				WriteCapacityUnits: aws.Int64(5),
+			},
+		})
+
+		if err != nil {
+			log.Printf("創建購物車表格失敗: %v", err)
+		} else {
+			log.Printf("成功創建購物車表格")
+		}
+	} else {
+		log.Printf("購物車表格已存在")
+	}
 }
 
 // 處理 Lambda 請求
